@@ -1,0 +1,102 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Betplay Betting Assistant</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/socket.io@4.5.1/client-dist/socket.io.min.js"></script>
+</head>
+<body class="bg-gray-100">
+    <div class="container mx-auto p-4">
+        <h1 class="text-3xl font-bold text-center text-green-600">Betplay Betting Assistant</h1>
+        <p class="text-center text-orange-500">Encuentra las mejores apuestas con estadísticas</p>
+        
+        <div id="recommendations" class="mt-8 grid grid-cols-1 md:grid-cols-2 gap-4">
+            <!-- Recommendations will be populated here -->
+        </div>
+        
+        <canvas id="statsChart" class="mt-8"></canvas>
+    </div>
+
+    <script>
+        const socket = io();
+        socket.on('update', (data) => {
+            console.log(data.message);
+        });
+
+        async function fetchRecommendations() {
+            const response = await fetch('/api/odds');
+            const data = await response.json();
+            const recDiv = document.getElementById('recommendations');
+            recDiv.innerHTML = '';
+            data.forEach(rec => {
+                recDiv.innerHTML += `
+                    <div class="bg-white p-4 rounded shadow">
+                        <h3 class="text-lg font-semibold">${rec.match}</h3>
+                        <p>Apuesta: ${rec.bet}</p>
+                        <p>Valor Esperado: ${rec.ev}</p>
+                        <button class="bg-green-600 text-white px-4 py-2 mt-2 rounded">Apostar</button>
+                    </div>
+                `;
+            });
+        }
+
+        fetchRecommendations();
+
+        // Gráfico de estadísticas
+        const ctx = document.getElementById('statsChart').getContext('2d');
+        new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: ['Tasa de Aciertos', 'ROI'],
+                datasets: [{
+                    label: 'Estadísticas',
+                    data: [0, 0],
+                    backgroundColor: ['#00A651', '#F5A623']
+                }]
+            }
+        });
+    </script>
+</body>
+</html>
